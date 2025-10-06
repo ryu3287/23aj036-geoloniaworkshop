@@ -17,41 +17,10 @@
     data-lat= "34.342"
     data-lng= "134.046"
     data-zoom="13"
-    data-marker="on"
+    data-geojson="./data.geojson"
     style="width:100%; height:60vh;"
-  ><div>
+  ><strong>香川県</strong><br>高松<div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const el = document.querySelector('.geolonia');
-
-      el.addEventListener('geolonia.load', async (e) => {
-        const map = e.detail.map;
-
-        // data.geojson ファイルを読み込む
-        const res = await fetch('./data.geojson');
-        const geojson = await res.json();
-
-        // 各データ（feature）に対してマーカーを置く
-        for (const f of geojson.features) {
-          const [lng, lat] = f.geometry.coordinates;
-          const { name, desc } = f.properties;
-
-          new maplibregl.Marker()
-          .setLngLat([lng, lat])
-          .setPopup(new maplibregl.Popup()
-          .setHTML(`<strong>${name}</strong><br>${desc ?? ''}`))
-          .addTo(map);
-        }
-
-        // すべてのマーカーが画面に収まるように表示範囲を調整
-        const coords = geojson.features.map(f => f.geometry.coordinates);
-        const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
-        map.fitBounds(bounds, { padding: 40, duration: 500 });
-      });
-    });
-  </script>
-</body>
-
+  </body>
 
 </html>
