@@ -1,0 +1,27 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "サンプル1",
+        "desc": "説明1"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [134.046, 34.342]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "サンプル2",
+        "desc": "説明2"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [134.060, 34.350]
+      }
+    }
+  ]
+}
