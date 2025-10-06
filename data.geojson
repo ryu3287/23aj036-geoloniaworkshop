@@ -5,7 +5,9 @@
       "type": "Feature",
       "properties": {
         "name": "サンプル1",
-        "desc": "説明1"
+        "desc": "説明1",
+        "marker-color": "0000ff",
+        "marker-size": "small"
       },
       "geometry": {
         "type": "Point",
@@ -16,7 +18,9 @@
       "type": "Feature",
       "properties": {
         "name": "サンプル2",
-        "desc": "説明2"
+        "desc": "説明2",
+        "marker-color": "0000ff",
+        "marker-size": "small"
       },
       "geometry": {
         "type": "Point",
