@@ -1,26 +1,189 @@
 <!doctype html>
 <html lang="ja">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Geolonia Maps Workshop</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.geolonia.com/v1/embed?geolonia-api-key=abf99257c8a3424eb286027b5031e328" defer></script>
+  <title>データプラットフォームくれ × Geolonia</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    header{padding:12px 16px;border-bottom:1px solid #eee;}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #map{height: calc(100vh - 72px);}
+    .badge{font-size:12px;padding:2px 6px;border:1px solid #ddd;border-radius:6px}
+    button,input,select{padding:6px 8px;border:1px solid #ccc;border-radius:6px}
+  </style>
+  <!-- Geolonia embed（APIキー付） -->
+  <script src="https://cdn.geolonia.com/v1/embed?geolonia-api-key=abf99257c8a3424eb286027b5031e328"></script>
 </head>
-
 <body>
-  <h1>Geolonia Maps – Marker Workshop</h1>
+  <header>
+    <div class="toolbar">
+      <strong>くれAPI → 地図描画デモ</strong>
+      <span class="badge" id="status">loading...</span>
+      <label>カテゴリ:
+        <select id="category">
+          <option value="">（すべて）</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+        </select>
+      </label>
+      <label>日付:
+        <input type="date" id="date" />
+      </label>
+      <button id="reload">再取得</button>
+    </div>
+  </header>
 
-  <div
-    class="geolonia"
-    data-lat= "34.342"
-    data-lng= "134.046"
-    data-zoom="13"
-    data-geojson="./data.geojson"
-    style="width:100%; height:60vh;"
-  ><strong>香川県</strong><br>高松<div>
+  <div id="map" class="geolonia" data-lat="34.248" data-lng="132.565" data-zoom="12"></div>
 
-  </body>
+  <script>
+    // ====== 設定（差し替えポイント） ======
+    const KURE_API_ENDPOINT = 'https://api.expolis.cloud/docs/opendata/t/kure#get-/kuremachi-wifi-spot'; // 例：実データのエンドポイントURL
+    const KURE_API_TOKEN    = 'b243360b-530f-4249-a99a-90eb80c67467'; // 発行済みトークン
+    // =====================================
 
+    // Geoloniaのmapインスタンス取得
+    // window.addEventListener('geolonia.ready') で地図初期化後に実行できる
+    let map;
+    document.addEventListener('geolonia.ready', (e) => {
+      map = e.detail.map; // MapLibre互換のインスタンス
+      // クラスタ用スタイルやレイヤーを後から追加するならここで
+      loadAndRender(); // 初回ロード
+    });
+
+    const $status = document.getElementById('status');
+    const $category = document.getElementById('category');
+    const $date = document.getElementById('date');
+    const $reload = document.getElementById('reload');
+
+    $reload.addEventListener('click', () => loadAndRender());
+
+    async function loadAndRender() {
+      $status.textContent = 'fetching...';
+
+      // クエリ例：カテゴリや日付でAPI側がフィルタ対応している場合
+      const params = new URLSearchParams();
+      if ($category.value) params.set('category', $category.value);
+      if ($date.value) params.set('date', $date.value);
+
+      const url = params.toString()
+        ? `${KURE_API_ENDPOINT}?${params.toString()}`
+        : KURE_API_ENDPOINT;
+
+      try {
+        const res = await fetch(url, {
+          headers: {
+            // よくある2パターンのどちらか：実装に合わせて片方に
+            // 'Authorization': `Bearer ${KURE_API_TOKEN}`,
+            'X-API-KEY': KURE_API_TOKEN,
+            'Accept': 'application/json'
+          }
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const data = await res.json();
+
+        // data が GeoJSON ならそのまま、配列なら変換
+        const geojson = Array.isArray(data) ? arrayToGeoJSON(data) :
+                        (data.type === 'FeatureCollection' ? data :
+                        // 万一未知形式なら、キー名推測で変換
+                        arrayLikeToGeoJSON(data));
+
+        plotGeoJSON(geojson);
+        $status.textContent = `描画: ${geojson.features.length}件`;
+      } catch (err) {
+        console.error(err);
+        $status.textContent = 'エラー: ' + err.message;
+        alert('データ取得に失敗しました。コンソールを確認してください。');
+      }
+    }
+
+    // 例：配列 [{lat,lng,name,...}, ...] → GeoJSONへ
+    function arrayToGeoJSON(rows) {
+      return {
+        type: 'FeatureCollection',
+        features: rows
+          .filter(r => isFinite(+r.lat) && isFinite(+r.lng))
+          .map(r => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [+r.lng, +r.lat] },
+            properties: { ...r }
+          }))
+      };
+    }
+
+    // 万一 data が {items:[...]} 等のラッパ形式の場合の簡易処理
+    function arrayLikeToGeoJSON(obj) {
+      const rows = obj.items || obj.data || [];
+      return arrayToGeoJSON(rows);
+    }
+
+    // Mapにプロット（既存レイヤーを置き換え）
+    function plotGeoJSON(geojson) {
+      const sourceId = 'kure-source';
+      const layerId  = 'kure-circle';
+      const layerId2 = 'kure-symbol';
+
+      if (map.getLayer(layerId))  map.removeLayer(layerId);
+      if (map.getLayer(layerId2)) map.removeLayer(layerId2);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+      map.addSource(sourceId, { type: 'geojson', data: geojson });
+
+      map.addLayer({
+        id: layerId,
+        type: 'circle',
+        source: sourceId,
+        paint: {
+          'circle-radius': 6,
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#fff'
+        }
+      });
+
+      map.addLayer({
+        id: layerId2,
+        type: 'symbol',
+        source: sourceId,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-offset': [0, 1.0],
+          'text-size': 12
+        },
+        paint: { 'text-halo-width': 1, 'text-halo-color': '#ffffff' }
+      });
+
+      // クリックでポップアップ
+      map.on('click', layerId, (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const props = f.properties || {};
+        const html = `
+          <div style="min-width:180px">
+            <strong>${escapeHtml(props.name || '（名称不明）')}</strong><br/>
+            緯度:${(+f.geometry.coordinates[1]).toFixed(5)} / 経度:${(+f.geometry.coordinates[0]).toFixed(5)}<br/>
+            ${Object.entries(props).map(([k,v]) => `${escapeHtml(k)}: ${escapeHtml(String(v))}`).join('<br/>')}
+          </div>`;
+        new geolonia.Popup()
+          .setLngLat(f.geometry.coordinates)
+          .setHTML(html)
+          .addTo(map);
+      });
+
+      // 表示範囲をデータにフィット
+      fitToData(geojson);
+    }
+
+    function fitToData(fc) {
+      if (!fc.features.length) return;
+      const coords = fc.features.map(f => f.geometry.coordinates);
+      const bbox = coords.reduce((b,[x,y]) => [
+        Math.min(b[0],x), Math.min(b[1],y),
+        Math.max(b[2],x), Math.max(b[3],y)
+      ], [Infinity,Infinity,-Infinity,-Infinity]);
+      map.fitBounds([[bbox[0],bbox[1]],[bbox[2],bbox[3]]], { padding: 40, duration: 600 });
+    }
+
+    function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+  </script>
+</body>
 </html>
